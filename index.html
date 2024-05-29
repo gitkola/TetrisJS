@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mobile Tetris</title>
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background-color: #000;
+        color: #fff;
+        overflow: hidden;
+        touch-action: manipulation;
+        user-select: none;
+      }
+      #game {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 1px;
+        background-color: #333;
+      }
+      #next-shape {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        margin-left: calc(100vh / 14);
+      }
+      .cell {
+        width: calc(100vh / 28);
+        height: calc(100vh / 28);
+        background-color: #444;
+      }
+      .empty-cell {
+        background-color: #000;
+      }
+      .occupied {
+        background-color: #fff;
+      }
+      #controls {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        position: absolute;
+        bottom: 0;
+      }
+      .control-area {
+        flex: 1;
+        height: 50px;
+      }
+      #score,
+      #next {
+        margin-bottom: 10px;
+      }
+      #pause {
+        position: absolute;
+        top: 0;
+        width: 100%;
+        height: 50px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="score">Score: 0</div>
+    <div id="next"></div>
+    <div id="next-shape"></div>
+    <div id="game"></div>
+    <div id="controls">
+      <div class="control-area" id="left"></div>
+      <div class="control-area" id="rotate"></div>
+      <div class="control-area" id="right"></div>
+      <div class="control-area" id="down"></div>
+    </div>
+    <div id="pause"></div>
+    <script>
+      const shapes = [
+        [[1, 1, 1, 1]],
+        [
+          [1, 1],
+          [1, 1],
+        ],
+        [
+          [0, 1, 0],
+          [1, 1, 1],
+        ],
+        [
+          [1, 0, 0],
+          [1, 1, 1],
+        ],
+        [
+          [0, 0, 1],
+          [1, 1, 1],
+        ],
+        [
+          [0, 1],
+          [1, 1],
+          [1, 0],
+        ],
+        [
+          [1, 0],
+          [1, 1],
+          [0, 1],
+        ],
+      ];
+
+      const game = document.getElementById("game");
+      const scoreDisplay = document.getElementById("score");
+      const nextShapeContainer = document.getElementById("next-shape");
+      const left = document.getElementById("left");
+      const right = document.getElementById("right");
+      const rotate = document.getElementById("rotate");
+      const down = document.getElementById("down");
+      const pause = document.getElementById("pause");
+
+      let score = 0;
+      let speed = 1000;
+      let nextShape = generateShape();
+      let currentShape = generateShape();
+      let currentPosition = { x: 4, y: 0 };
+      let currentRotation = 0;
+      let interval = null;
+      let isPaused = false;
+
+      function createGrid() {
+        for (let i = 0; i < 200; i++) {
+          const cell = document.createElement("div");
+          cell.classList.add("cell");
+          game.appendChild(cell);
+        }
+      }
+
+      function createNextShapeGrid() {
+        for (let i = 0; i < 16; i++) {
+          const cell = document.createElement("div");
+          cell.classList.add("cell", "empty-cell");
+          nextShapeContainer.appendChild(cell);
+        }
+      }
+
+      function drawShape(shape, container, position, columns) {
+        shape.forEach((row, y) => {
+          row.forEach((cell, x) => {
+            if (cell) {
+              const index = (position.y + y) * columns + (position.x + x);
+              container.children[index].classList.add("occupied");
+            }
+          });
+        });
+      }
+
+      function clearShape(shape, container, position, columns) {
+        shape.forEach((row, y) => {
+          row.forEach((cell, x) => {
+            if (cell) {
+              const index = (position.y + y) * columns + (position.x + x);
+              container.children[index].classList.remove("occupied");
+            }
+          });
+        });
+      }
+
+      function moveShape(direction) {
+        clearShape(currentShape, game, currentPosition, 10);
+        if (direction === "left") currentPosition.x--;
+        if (direction === "right") currentPosition.x++;
+        if (direction === "down") currentPosition.y++;
+        if (direction === "rotate") currentShape = rotateShape(currentShape);
+        if (isValidMove()) {
+          drawShape(currentShape, game, currentPosition, 10);
+        } else {
+          if (direction === "down") {
+            currentPosition.y--;
+            drawShape(currentShape, game, currentPosition, 10);
+            freezeShape();
+          } else {
+            revertMove(direction);
+            drawShape(currentShape, game, currentPosition, 10);
+          }
+        }
+      }
+
+      function isValidMove() {
+        return currentShape.every((row, y) =>
+          row.every((cell, x) => {
+            if (cell) {
+              const newX = currentPosition.x + x;
+              const newY = currentPosition.y + y;
+              if (
+                newX < 0 ||
+                newX >= 10 ||
+                newY >= 20 ||
+                game.children[newY * 10 + newX].classList.contains("occupied")
+              ) {
+                return false;
+              }
+            }
+            return true;
+          })
+        );
+      }
+
+      function revertMove(direction) {
+        if (direction === "left") currentPosition.x++;
+        if (direction === "right") currentPosition.x--;
+        if (direction === "down") currentPosition.y--;
+        if (direction === "rotate") currentShape = rotateShape(currentShape); // Rotate back
+      }
+
+      function freezeShape() {
+        currentShape.forEach((row, y) => {
+          row.forEach((cell, x) => {
+            if (cell) {
+              const index =
+                (currentPosition.y + y) * 10 + (currentPosition.x + x);
+              game.children[index].classList.add("occupied");
+            }
+          });
+        });
+        checkForCompleteRows();
+        currentShape = nextShape;
+        nextShape = generateShape();
+        currentPosition = { x: 4, y: 0 };
+        if (!isValidMove()) {
+          endGame();
+        }
+        updateNextShape();
+      }
+
+      function checkForCompleteRows() {
+        let rowsCleared = 0;
+        for (let y = 19; y >= 0; y--) {
+          let isComplete = true;
+          for (let x = 0; x < 10; x++) {
+            if (!game.children[y * 10 + x].classList.contains("occupied")) {
+              isComplete = false;
+              break;
+            }
+          }
+          if (isComplete) {
+            for (let x = 0; x < 10; x++) {
+              game.children[y * 10 + x].classList.remove("occupied");
+            }
+            const removed = Array.from(game.children).splice(y * 10, 10);
+            game.prepend(...removed);
+            rowsCleared++;
+            y++; // Check the same row again
+          }
+        }
+        score += rowsCleared * 10;
+        updateScore();
+        increaseSpeed();
+      }
+
+      function rotateShape(shape) {
+        const newShape = [];
+        for (let y = 0; y < shape[0].length; y++) {
+          newShape[y] = [];
+          for (let x = 0; x < shape.length; x++) {
+            newShape[y][x] = shape[shape.length - 1 - x][y];
+          }
+        }
+        return newShape;
+      }
+
+      function generateShape() {
+        const index = Math.floor(Math.random() * shapes.length);
+        return shapes[index];
+      }
+
+      function updateScore() {
+        scoreDisplay.innerText = `Score: ${score}`;
+      }
+
+      function updateNextShape() {
+        nextShapeContainer.innerHTML = "";
+        createNextShapeGrid();
+        drawShape(nextShape, nextShapeContainer, { x: 0, y: 0 }, 4);
+      }
+
+      function startGame() {
+        createGrid();
+        createNextShapeGrid();
+        drawShape(currentShape, game, currentPosition, 10);
+        updateScore();
+        updateNextShape();
+        interval = setInterval(() => {
+          moveShape("down");
+        }, speed);
+      }
+
+      function increaseSpeed() {
+        if (score > 0 && score % 50 === 0) {
+          speed = Math.max(100, speed - 50);
+          clearInterval(interval);
+          interval = setInterval(() => {
+            moveShape("down");
+          }, speed);
+        }
+      }
+
+      function pauseGame() {
+        if (isPaused) {
+          interval = setInterval(() => {
+            moveShape("down");
+          }, speed);
+        } else {
+          clearInterval(interval);
+        }
+        isPaused = !isPaused;
+      }
+
+      function endGame() {
+        clearInterval(interval);
+        alert("Game Over");
+        location.reload();
+      }
+
+      left.addEventListener("click", () => moveShape("left"));
+      right.addEventListener("click", () => moveShape("right"));
+      rotate.addEventListener("click", () => moveShape("rotate"));
+      down.addEventListener("click", () => moveShape("down"));
+      pause.addEventListener("click", pauseGame);
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft") moveShape("left");
+        if (e.key === "ArrowRight") moveShape("right");
+        if (e.key === "ArrowUp") moveShape("rotate");
+        if (e.key === "ArrowDown") moveShape("down");
+        if (e.key === " ") pauseGame();
+      });
+
+      // Disable zooming and context menu
+      window.addEventListener(
+        "touchstart",
+        (e) => {
+          if (e.touches.length > 1) e.preventDefault();
+        },
+        { passive: false }
+      );
+
+      window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+      document.body.addEventListener("touchend", (e) => {
+        if (e.target === left) moveShape("left");
+        if (e.target === right) moveShape("right");
+        if (e.target === rotate) moveShape("rotate");
+        if (e.target === down) moveShape("down");
+        if (e.target === pause) pauseGame();
+      });
+
+      startGame();
+    </script>
+  </body>
+</html>
