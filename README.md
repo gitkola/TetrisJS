@@ -1,6 +1,6 @@
-# TetrisJS
+# tetrisjs
 
-Link - [https://gitkola.github.io/TetrisJS]
+Link - [https://gitkola.github.io/tetrisjs]
 
 ## Controls
 
